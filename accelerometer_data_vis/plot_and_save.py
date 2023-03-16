@@ -3,7 +3,7 @@ import numpy as np
 import threading
 from queue import Queue
 import pygame
-
+import datetime
 
 class Animate():
 
@@ -29,8 +29,12 @@ class Animate():
         self.port_thread.start()
         print("serial port started")
 
+        # open output data file:
+        self.file = open('/data/'+ datetime.now.strftime("%y-%m-%d_%H-%M-%S")+'_accel_log.csv','a')
+        self.file.write('timestamp x_mean x_std y_mean y_std x_mean z_std dT_mean dT_std')
         # begin animation loop:
         self.run_loop()
+        
 
 
     def draw_background(self):
@@ -46,6 +50,7 @@ class Animate():
 
     def end_animation(self):
         self.port_thread.join()
+        self.file.close()
 
     def background_thread(self, port, data_queue):
         print('inside background thread')
@@ -53,32 +58,58 @@ class Animate():
             data_queue.put(port.readline())
 
     def process_and_save(self):
-        arr = np.array(self.data_arr)
-        MAX = np.max(arr, axis=0) # find maxima and minima of each colum
-        MIN = np.min(arr, axis=0)
-        MID = ( MAX + MIN )/2
+        #arr = np.array(self.data_arr)
 
-        print(MAX)
-        print(MIN)
-        print(MID)
+        x_trace = np.array(self.data_arr[:][0])
+        y_trace = np.array(self.data_arr[:][1])
+        z_trace = np.array(self.data_arr[:][2])
+        t_trace = np.array(self.data_arr[:][3])
 
-        # split x and y acceleration values each time they cross the midline:
-        prev_x = MID[0]
-        prev_y = MID[1]
-        x_trig_i = []
-        y_trig_i = []
+        x_max = np.max(x_trace)
+        y_max = np.max(y_trace)
+        x_min = np.min(x_trace)
+        y_min = np.min(y_trace)
+        x_trig = (x_max + x_min)/2 # cut data trace into cycles at rising edge crossing
+        y_trig = (y_max + y_min)/2 # the average of heighest and lowest values
+
+        x_cycle_count = 0
+        x_cycles = [[]] # empty list of lists, with list [0] initialized
+        y_cycle_count = 0
+        y_cycles = [[]]
+
+        # find avg and std for raw z and raw dT data:
         
-        for i in range(len(arr)):
-            if prev_x < MID[0] and arr[i][0] > MID[0]:
-                x_trig_i.append(i)
-            if prev_y < MID[1] and arr[i][1] > MID[1]:
-                y_trig_i.append(i)
 
-        # find pk-pk value for each cycle, store avg and std pk-pk:
+        # iterate through data and cut into a list of cycles stored in {x/y}_cycles[]
+        for i in range(len(x_trace-1)):
+            x_cycles[x_cycle_count].append(x_trace[i])
+            y_cycles[x_cycle_count].append(y_trace[i])
+            if x_trace[i] < x_trig and x_trace[i+1] > x_trig:
+                x_cycle_count += 1
+            
+            if y_trace[i] < y_trig and y_trace[i+1] > y_trig:
+                y_cycle_count += 1
+        
+        # find the mean and std of peak-peak values for both x and y:
         x_pkpk = []
-        for i in range(len(x_trig_i-1)):
-            pass
+        y_pkpk = []
+        for cycle in x_cycles:
+            x_pkpk.append(max(cycle) - min(cycle))
+        for cycle in y_cycles:
+            y_pkpk.append(max(cycle) - min(cycle))
 
+        x_mean = np.mean(x_pkpk)
+        x_std = np.std(x_pkpk)
+        y_mean = np.mean(y_pkpk)
+        y_std = np.std(y_pkpk)
+        z_mean = np.mean(z_trace)
+        z_std = np.std(z_trace)
+        t_mean = np.mean(t_trace)
+        t_std = np.std(t_trace)
+        timestamp = datetime.now.strftime("%y-%m-%d_%H-%M-%S")
+        self.file.write(timestamp+' '+x_mean+' '+x_std+' '+y_mean+' '+y_std+' '+z_mean+' '+z_std+' '+t_mean+' '+t_std)
+        
+        
         #TODO:
         # simplify things so you are just dealing with x and y traces independently( outside of arrays)
         # find pk-pk for each cycle for x and y, and save avg and std to file
@@ -90,7 +121,7 @@ class Animate():
                 
 
 
-
+        # reset data array:
         self.data_arr = []
 
     def run_loop(self):
