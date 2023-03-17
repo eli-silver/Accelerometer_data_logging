@@ -41,7 +41,7 @@ class Animate():
         self.grid_color = '0x727575'
 
         self.plot_grid = True
-        self.plot_real_time = False
+        self.plot_real_time = True
         self.plot_filt_data = True
         self.plot_trig_points = True
 
@@ -70,6 +70,7 @@ class Animate():
         self.run_loop()
 
     def draw_background(self):
+        #fill screen to cover last frame
         self.screen.fill('0x313837')
 
         if(self.plot_grid == False):
@@ -92,6 +93,7 @@ class Animate():
         
         if( self.plot_real_time == False):
             return
+        #create regularly spaced x axis:
         time_range = np.linspace(self.padding, self.width-self.padding, num=self.plot_len)
         
         x_plt_trace = [[time_range[i], -self.plot_y_scale*self.plot_queue[i][0]+self.height/2] for i in range(len(self.plot_queue))]
@@ -117,7 +119,8 @@ class Animate():
 
         if(self.plot_trig_points == False):
             return
-
+        #plot circles at every point the code has detected a rising edge
+        # pkpk values calculated between trigger points.
         [pygame.draw.circle(self.screen,self.red_trig,x_plt_trace[i],2) for i in self.x_trig_i]
         [pygame.draw.circle(self.screen,self.grn_trig,y_plt_trace[i],2) for i in self.y_trig_i]
 
@@ -137,23 +140,27 @@ class Animate():
         z_trace = signal.filtfilt( self.filt_coeff_b,self.filt_coeff_a, [item[2] for item in self.data_arr] )
         t_trace = [item[3] for item in self.data_arr]
 
+        # array used for plotting filtered data:
         self.filt_data_arr = [[x_trace[i],y_trace[i],z_trace[i]] for i in range(self.plot_len)]
         
+        # find max and min of each trace. Trigger threshold set at average of max and min
         x_max = np.max(x_trace)
         y_max = np.max(y_trace)
         x_min = np.min(x_trace)
         y_min = np.min(y_trace)
-        x_trig = (x_max + x_min)/2 # cut data trace into cycles at rising edge crossing
-        y_trig = (y_max + y_min)/2 # the average of heighest and lowest values
+        x_trig = (x_max + x_min)/2 
+        y_trig = (y_max + y_min)/2 
 
+        # cycles are sections of data between rising edge trigger points
+        # First and last cycles are thrown out since they may be incomplete
         x_cycle_count = 0
         x_cycle_list = []
         x_cycles = [] # empty list of lists, with list [0] initialized
         y_cycle_count = 0
         y_cycle_list = []
         y_cycles = []
-        self.x_trig_i = []
-        self.y_trig_i = []
+        self.x_trig_i = [] # used to plot trigger points on filtered data plot
+        self.y_trig_i = [] # 
 
         # iterate through data and cut into a list of cycles stored in {x/y}_cycles[]
         for i in range(len(x_trace)-1):
@@ -180,6 +187,9 @@ class Animate():
         for i in range(1,len(y_cycles)-1):
             y_pkpk.append(max(y_cycles[i]) - min(y_cycles[i]))
 
+        # calculate mean and std of pkpk values to store. 
+        # z and dT mean and std is calculated for entire trace since they should
+        # be periodic so cycles are not well defined. 
         try:    
             x_mean =str(np.mean(x_pkpk).round(3))
             x_std = str(np.std(x_pkpk).round(3))
@@ -191,6 +201,8 @@ class Animate():
             t_std = str(np.std(t_trace).round(3))
         except:
             print('error calculating MEAN or STD')
+        
+        # write data to file
         curr_time = datetime.now()
         timestamp = curr_time.strftime("%y-%m-%d_%H-%M-%S")
         print("save data at: " + curr_time.strftime("%H-%M-%S"))
@@ -217,13 +229,16 @@ class Animate():
             while(self.data_queue.empty() == False):
                 raw_data = (self.data_queue.get().decode('utf-8')) # decode binary string from serial port
                 try:
-                    data = list(map(int, raw_data.strip("\r\n").split(" "))) # turn string into array of integers
-                    # convert data from uV to g based on accelerometer specs
+                    # turn string into array of integers:
+                    data = list(map(int, raw_data.strip("\r\n").split(" "))) 
+                    # convert data from microvolts to G (accel) based on accelerometer datasheet specs:
                     g_data = list(map(lambda x: round(((x/1000000) - 1.615)/.3 , 3),data))
-                    g_data[3] = round(data[3],3) # reset last element to microseconds between samples
+                    g_data[3] = round(data[3],3) # reset dT element to microseconds between samples (should not be scaled)
                 
                     self.data_arr.append(g_data)
                     self.plot_queue.append(g_data)
+
+                    # data array buffer is processed and stored when full
                     if(len(self.data_arr) == self.data_sample_len):
                         self.process_and_save()
                         
@@ -234,9 +249,9 @@ class Animate():
             self.plot_traces()
             self.plot_filtered_output()
             
-            #display current fps:
-            fps = self.font.render( str(int(self.clock.get_fps())) ,True,'white')
-            self.screen.blit(fps,(self.padding + self.width/10, self.padding))
+            #display animation fps:
+            #fps = self.font.render( str(int(self.clock.get_fps())) ,True,'white')
+            #self.screen.blit(fps,(self.padding + self.width/10, self.padding))
             #display accel_averages:
             ax = self.font.render('X": ' + str(self.x_avg), True, self.red)
             ay = self.font.render('Y": ' + str(self.y_avg), True, self.grn)
@@ -254,5 +269,6 @@ class Animate():
         self.end_animation()
 
 
+# program entry point:
 if __name__=='__main__':
     my_animation = Animate()

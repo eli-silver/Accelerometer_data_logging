@@ -45,22 +45,13 @@ void setup() {
   pinMode(pin_y, INPUT);
   pinMode(pin_z, INPUT);
 
-  //analogReadResolution(12);
-  //adcAttachPin(pin_x);
-  //adcAttachPin(pin_y);
-  //adcAttachPin(pin_z);
-  //adc_attenuation_t(1);
-
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
   timeSync(loopTime);
 
-  //int val1 = (analogRead(pin_x) * adc_per_uV / 100);
-  //int val2 = (analogRead(pin_y) * adc_per_uV / 100);
-  //int val3 = (analogRead(pin_z) * adc_per_uV / 100);
-  
+
   curr_time = micros();
   int delta_t = curr_time - prev_time;
   prev_time = curr_time;
