@@ -64,7 +64,7 @@ class Animate():
 
         # open output data file:
         self.file = open(".\data"+ datetime.now().strftime("\%y-%m-%d_%H-%M-%S")+'_accel_log.csv','a+')
-        self.file.write('timestamp,x_mean,x_std,y_mean,y_std,x_mean,z_std,dT_mean,dT_std\n')
+        self.file.write('timestamp,x_mean,x_std,y_mean,y_std,z_mean,z_std,dT_mean,dT_std\n')
 
         # begin animation loop:
         self.run_loop()
