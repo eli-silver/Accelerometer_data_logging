@@ -3,7 +3,7 @@
 int baud_rate = 115200;
 
 unsigned long timer = 0;
-long loopTime = 1000;   // microseconds
+long loopTime = 2000;   // microseconds
 unsigned long prev_time = 0;
 unsigned long curr_time = 0;
 

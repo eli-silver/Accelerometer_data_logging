@@ -3,68 +3,142 @@ import numpy as np
 import threading
 from queue import Queue
 import pygame
-import datetime
+from datetime import datetime
+from time import sleep
+from scipy import signal
 
 class Animate():
-
 
     def __init__(self) -> None:
         
         # check serial port of ESP32 device on your computer:
         self.serial_port = 'COM6'
-
+        # data storage variables:
         self.data_queue = Queue()
         self.data_arr = []
+        self.filt_data_arr = []
+        self.data_sample_len = 2500 # 5 seconds of data at 500Hz sample rate
+        self.x_avg = 0
+        self.y_avg = 0
+        self.z_avg = 0
+        self.x_trig_i = []
+        self.y_trig_i = []
+
         # setup pygame window:
         pygame.init()
-        self.width, self.height = 600,400
+        self.fps = 30
+        self.width, self.height = 800,400
         self.padding = 20
         self.screen = pygame.display.set_mode((self.width, self.height))
         self.clock = pygame.time.Clock()
-        self.running = True   
+        self.running = True
+        self.font = pygame.font.Font('freesansbold.ttf', 16)
+        self.red = '0xab250e'
+        self.red_trig = '0xd46450'
+        self.grn = '0x1aab40'
+        self.grn_trig = '0x8ce6a4'
+        self.blu = '0x6f46db'
+        self.grid_color = '0x727575'
+
+        self.plot_grid = True
+        self.plot_real_time = False
+        self.plot_filt_data = True
+        self.plot_trig_points = True
+
+        # plotting parameters:
+        self.plot_len = 2500
+        self.plot_queue = []
+        self.plot_y_scale = self.height / 10
+
+        # setup data processing low pass filter:
+        sample_rate = 500 # 0.5kHz sample frequency
+        cutoff_freq = 50 # -3db frequency of filter in Hz
+        self.filt_coeff_b, self.filt_coeff_a = signal.butter(3,cutoff_freq,'lowpass',fs=sample_rate)
 
         # setup serial port:     
         self.port = serial.Serial(self.serial_port, baudrate=115200, timeout=1 )
+        print("port opened at: " + str(self.port.name))
         self.port_thread = threading.Thread(target=self.background_thread, args=(self.port,self.data_queue,))
         self.port_thread.start()
-        print("serial port started")
+        sleep(.1)
 
         # open output data file:
-        self.file = open('/data/'+ datetime.now.strftime("%y-%m-%d_%H-%M-%S")+'_accel_log.csv','a')
-        self.file.write('timestamp x_mean x_std y_mean y_std x_mean z_std dT_mean dT_std')
+        self.file = open(".\data"+ datetime.now().strftime("\%y-%m-%d_%H-%M-%S")+'_accel_log.csv','a+')
+        self.file.write('timestamp,x_mean,x_std,y_mean,y_std,x_mean,z_std,dT_mean,dT_std\n')
+
         # begin animation loop:
         self.run_loop()
-        
-
 
     def draw_background(self):
+        self.screen.fill('0x313837')
+
+        if(self.plot_grid == False):
+            return
         num_vert_lines =  10
-        num_hori_lines = 10
+        num_hori_lines = 5
     
         for i in range(num_vert_lines+1): 
             y_val = i * self.height/num_vert_lines
-            pygame.draw.line(self.screen,'0x9ea3a3',(0,y_val),(self.width,y_val ))
+            pygame.draw.line(self.screen,self.grid_color,(0,y_val),(self.width,y_val ))
         for i in range(num_hori_lines+1):
-            x_val = i * self.width/num_hori_lines
-            pygame.draw.line(self.screen,'0x9ea3a3',(x_val,0),(x_val,self.height))
+            x_val = i * (self.width-2*self.padding)/num_hori_lines
+            pygame.draw.line(self.screen,self.grid_color,(x_val+self.padding,0),(x_val+self.padding,self.height))
+        pygame.draw.line(self.screen,self.grid_color, (0,self.height/2),(self.width, self.height/2), 2 )
+        
+    def plot_traces(self):
+        overage = len(self.plot_queue) - self.plot_len
+        if overage > 0:
+            del self.plot_queue[0:overage]
+        
+        if( self.plot_real_time == False):
+            return
+        time_range = np.linspace(self.padding, self.width-self.padding, num=self.plot_len)
+        
+        x_plt_trace = [[time_range[i], -self.plot_y_scale*self.plot_queue[i][0]+self.height/2] for i in range(len(self.plot_queue))]
+        y_plt_trace = [[time_range[i], -self.plot_y_scale*self.plot_queue[i][1]+self.height/2] for i in range(len(self.plot_queue))]
+        z_plt_trace = [[time_range[i], -self.plot_y_scale*self.plot_queue[i][2]+self.height/2] for i in range(len(self.plot_queue))]
+        pygame.draw.aalines(self.screen,self.red,False,x_plt_trace)
+        pygame.draw.aalines(self.screen,self.grn,False,y_plt_trace)
+        pygame.draw.aalines(self.screen,self.blu,False,z_plt_trace)        
+    
+    def plot_filtered_output(self):
+        if(self.plot_filt_data == False):
+            return
+        if len(self.filt_data_arr) < self.plot_len: # if the filtered data array is not full, don't plot
+            return
+        self.filt_data_arr = self.filt_data_arr[:self.plot_len]
+        time_range = np.linspace(self.padding, self.width-self.padding, num=self.plot_len)
+        x_plt_trace = [[time_range[i],-self.plot_y_scale*self.filt_data_arr[i][0]+self.height/2] for i in range(self.plot_len)]
+        y_plt_trace = [[time_range[i],-self.plot_y_scale*self.filt_data_arr[i][1]+self.height/2] for i in range(self.plot_len)]
+        z_plt_trace = [[time_range[i],-self.plot_y_scale*self.filt_data_arr[i][2]+self.height/2] for i in range(self.plot_len)]
+        pygame.draw.aalines(self.screen,self.red,False,x_plt_trace)
+        pygame.draw.aalines(self.screen,self.grn,False,y_plt_trace)
+        pygame.draw.aalines(self.screen,self.blu,False,z_plt_trace)
+
+        if(self.plot_trig_points == False):
+            return
+
+        [pygame.draw.circle(self.screen,self.red_trig,x_plt_trace[i],2) for i in self.x_trig_i]
+        [pygame.draw.circle(self.screen,self.grn_trig,y_plt_trace[i],2) for i in self.y_trig_i]
 
     def end_animation(self):
         self.port_thread.join()
         self.file.close()
 
     def background_thread(self, port, data_queue):
-        print('inside background thread')
         while(self.running):
             data_queue.put(port.readline())
 
     def process_and_save(self):
-        #arr = np.array(self.data_arr)
 
-        x_trace = np.array(self.data_arr[:][0])
-        y_trace = np.array(self.data_arr[:][1])
-        z_trace = np.array(self.data_arr[:][2])
-        t_trace = np.array(self.data_arr[:][3])
+        # copy individual traces from data_arr to variables and apply LP filter to accel. data
+        x_trace = signal.filtfilt( self.filt_coeff_b,self.filt_coeff_a, [item[0] for item in self.data_arr] )
+        y_trace = signal.filtfilt( self.filt_coeff_b,self.filt_coeff_a, [item[1] for item in self.data_arr] )
+        z_trace = signal.filtfilt( self.filt_coeff_b,self.filt_coeff_a, [item[2] for item in self.data_arr] )
+        t_trace = [item[3] for item in self.data_arr]
 
+        self.filt_data_arr = [[x_trace[i],y_trace[i],z_trace[i]] for i in range(self.plot_len)]
+        
         x_max = np.max(x_trace)
         y_max = np.max(y_trace)
         x_min = np.min(x_trace)
@@ -73,54 +147,58 @@ class Animate():
         y_trig = (y_max + y_min)/2 # the average of heighest and lowest values
 
         x_cycle_count = 0
-        x_cycles = [[]] # empty list of lists, with list [0] initialized
+        x_cycle_list = []
+        x_cycles = [] # empty list of lists, with list [0] initialized
         y_cycle_count = 0
-        y_cycles = [[]]
-
-        # find avg and std for raw z and raw dT data:
-        
+        y_cycle_list = []
+        y_cycles = []
+        self.x_trig_i = []
+        self.y_trig_i = []
 
         # iterate through data and cut into a list of cycles stored in {x/y}_cycles[]
-        for i in range(len(x_trace-1)):
-            x_cycles[x_cycle_count].append(x_trace[i])
-            y_cycles[x_cycle_count].append(y_trace[i])
+        for i in range(len(x_trace)-1):
+
+            x_cycle_list.append(x_trace[i])
+            y_cycle_list.append(y_trace[i])
             if x_trace[i] < x_trig and x_trace[i+1] > x_trig:
+                x_cycles.append(x_cycle_list)
+                x_cycle_list = []
                 x_cycle_count += 1
+                self.x_trig_i.append(i)
             
             if y_trace[i] < y_trig and y_trace[i+1] > y_trig:
+                y_cycles.append(y_cycle_list)
+                y_cycle_list = []
                 y_cycle_count += 1
-        
+                self.y_trig_i.append(i)
+
         # find the mean and std of peak-peak values for both x and y:
         x_pkpk = []
         y_pkpk = []
-        for cycle in x_cycles:
-            x_pkpk.append(max(cycle) - min(cycle))
-        for cycle in y_cycles:
-            y_pkpk.append(max(cycle) - min(cycle))
+        for i in range(1,len(x_cycles)-1):
+            x_pkpk.append(max(x_cycles[i]) - min(x_cycles[i]))
+        for i in range(1,len(y_cycles)-1):
+            y_pkpk.append(max(y_cycles[i]) - min(y_cycles[i]))
 
-        x_mean = np.mean(x_pkpk)
-        x_std = np.std(x_pkpk)
-        y_mean = np.mean(y_pkpk)
-        y_std = np.std(y_pkpk)
-        z_mean = np.mean(z_trace)
-        z_std = np.std(z_trace)
-        t_mean = np.mean(t_trace)
-        t_std = np.std(t_trace)
-        timestamp = datetime.now.strftime("%y-%m-%d_%H-%M-%S")
-        self.file.write(timestamp+' '+x_mean+' '+x_std+' '+y_mean+' '+y_std+' '+z_mean+' '+z_std+' '+t_mean+' '+t_std)
+        try:    
+            x_mean =str(np.mean(x_pkpk).round(3))
+            x_std = str(np.std(x_pkpk).round(3))
+            y_mean = str(np.mean(y_pkpk).round(3))
+            y_std = str(np.std(y_pkpk).round(3))
+            z_mean = str(np.mean(z_trace).round(3))
+            z_std = str(np.std(z_trace).round(3))
+            t_mean = str(np.mean(t_trace).round(3))
+            t_std = str(np.std(t_trace).round(3))
+        except:
+            print('error calculating MEAN or STD')
+        curr_time = datetime.now()
+        timestamp = curr_time.strftime("%y-%m-%d_%H-%M-%S")
+        print("save data at: " + curr_time.strftime("%H-%M-%S"))
+        self.file.write(timestamp+','+x_mean+','+x_std+','+y_mean+','+y_std+','+z_mean+','+z_std+','+t_mean+','+t_std+'\n')
         
-        
-        #TODO:
-        # simplify things so you are just dealing with x and y traces independently( outside of arrays)
-        # find pk-pk for each cycle for x and y, and save avg and std to file
-        # for z, save max, min, std of all samples to file
-        # for dT, save max, min, std of all samples to file
-        # try using Pandas csv write to save out with nice headings? or just init the heading when you open the file...
-        # get this done quickly! remove plotting code until further notice. 
-            
-                
-
-
+        self.x_avg = x_mean
+        self.y_avg = y_mean
+        self.z_avg = z_mean
         # reset data array:
         self.data_arr = []
 
@@ -132,28 +210,46 @@ class Animate():
                 if event.type == pygame.QUIT:
                     self.running = False
 
-            # fill the screen with a color to wipe away anything from last frame
-            self.screen.fill('0xaae6e0')
-            # RENDER YOUR GAME HERE
+            # draw background to wipe away anything from last frame, draw plot grid
             self.draw_background()
             
             # get data from background thread:
             while(self.data_queue.empty() == False):
                 raw_data = (self.data_queue.get().decode('utf-8')) # decode binary string from serial port
-                data = list(map(int, raw_data.strip("\r\n").split(" "))) # turn string into array of integers
+                try:
+                    data = list(map(int, raw_data.strip("\r\n").split(" "))) # turn string into array of integers
+                    # convert data from uV to g based on accelerometer specs
+                    g_data = list(map(lambda x: round(((x/1000000) - 1.615)/.3 , 3),data))
+                    g_data[3] = round(data[3],3) # reset last element to microseconds between samples
                 
-                # convert data from uV to g based on accelerometer specs
-                g_data = list(map(lambda x: round(((x/1000000) - 1.65)/.3 , 3),data))
-                g_data[3] = data[3] # reset last element to microseconds between samples
-                self.data_arr.append(g_data)
-                if(len(self.data_arr) == 1000):
-                    print(g_data)
-                    self.process_and_save()
-
+                    self.data_arr.append(g_data)
+                    self.plot_queue.append(g_data)
+                    if(len(self.data_arr) == self.data_sample_len):
+                        self.process_and_save()
+                        
+                except:
+                    print('serial read error')
+            
+            # plot on the screen: 
+            self.plot_traces()
+            self.plot_filtered_output()
+            
+            #display current fps:
+            fps = self.font.render( str(int(self.clock.get_fps())) ,True,'white')
+            self.screen.blit(fps,(self.padding + self.width/10, self.padding))
+            #display accel_averages:
+            ax = self.font.render('X": ' + str(self.x_avg), True, self.red)
+            ay = self.font.render('Y": ' + str(self.y_avg), True, self.grn)
+            az = self.font.render('Z": ' + str(self.z_avg), True, self.blu)
+            self.screen.blit(ax, (3*self.width/10, self.padding))
+            self.screen.blit(ay, (5*self.width/10, self.padding))
+            self.screen.blit(az, (7*self.width/10, self.padding))
+            
             # flip() the display to put your work on screen
             pygame.display.flip()
-            self.clock.tick(120)  # limits FPS to 120
+            self.clock.tick(self.fps)  # limits FPS 
 
+        #runs when window x is pressed:
         pygame.quit()
         self.end_animation()
 
