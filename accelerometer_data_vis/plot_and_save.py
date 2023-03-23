@@ -10,7 +10,7 @@ from scipy import signal
 class Animate():
 
     def __init__(self) -> None:
-        
+        #### code to get reviewed ####
         # check serial port of ESP32 device on your computer:
         self.serial_port = 'COM6'   ### CHANGE THIS TO MATCH YOUR COMPUTER ###
         # data storage variables:
@@ -66,8 +66,6 @@ class Animate():
         self.file = open(".\data"+ datetime.now().strftime("\%y-%m-%d_%H-%M-%S")+'_accel_log.csv','a+')
         self.file.write('timestamp,x_mean,x_std,y_mean,y_std,z_mean,z_std,dT_mean,dT_std\n')
 
-        # begin animation loop:
-        self.run_loop()
 
     def draw_background(self):
         #fill screen to cover last frame
@@ -272,3 +270,4 @@ class Animate():
 # program entry point:
 if __name__=='__main__':
     my_animation = Animate()
+    my_animation.run_loop()
