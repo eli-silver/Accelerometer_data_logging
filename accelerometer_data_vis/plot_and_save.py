@@ -12,7 +12,7 @@ class Animate():
     def __init__(self) -> None:
         
         # check serial port of ESP32 device on your computer:
-        self.serial_port = 'COM6'
+        self.serial_port = 'COM6'   ### CHANGE THIS TO MATCH YOUR COMPUTER ###
         # data storage variables:
         self.data_queue = Queue()
         self.data_arr = []
