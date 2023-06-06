@@ -25,7 +25,8 @@ class Animate():
         self.y_trig_i = []
 
         # data snapshot save parameters:
-        self.save_raw = True 
+        self.save_raw = True    # This is used to turn on the data snapshot function
+                                # If True, self.data_arr will be saved to a file when the space bar is pressed
         self.save_raw_buffer = False
 
         # setup pygame window:
@@ -220,7 +221,7 @@ class Animate():
         self.data_arr = []
 
     def save_snapshot(self):
-        with open(".\data"+ datetime.now().strftime("\%y-%m-%d_%H-%M-%S")+'_accel_log.csv','a+') as f_snapshot:
+        with open(".\data"+ datetime.now().strftime("\%y-%m-%d_%H-%M-%S")+'_raw_snapshot.csv','a+') as f_snapshot:
             f_snapshot.write('x_raw,y_raw,z_raw,dT_raw\n')
             curr_time = datetime.now()
             print("Saving Snapshot At: " + curr_time.strftime("%H-%M-%S"))
