@@ -24,6 +24,10 @@ class Animate():
         self.x_trig_i = []
         self.y_trig_i = []
 
+        # data snapshot save parameters:
+        self.save_raw = True 
+        self.save_raw_buffer = False
+
         # setup pygame window:
         pygame.init()
         self.fps = 30
@@ -131,6 +135,7 @@ class Animate():
     def background_thread(self, port, data_queue):
         while(self.running):
             data_queue.put(port.readline())
+    
 
     def process_and_save(self):
 
@@ -214,6 +219,15 @@ class Animate():
         # reset data array:
         self.data_arr = []
 
+    def save_snapshot(self):
+        with open(".\data"+ datetime.now().strftime("\%y-%m-%d_%H-%M-%S")+'_accel_log.csv','a+') as f_snapshot:
+            f_snapshot.write('x_raw,y_raw,z_raw,dT_raw\n')
+            curr_time = datetime.now()
+            print("Saving Snapshot At: " + curr_time.strftime("%H-%M-%S"))
+            for row in self.data_arr:
+                f_snapshot.write(row[0]+','+row[1]+','+row[2]+','+row[3] +'\n')
+        self.save_raw_buffer = False
+
     def run_loop(self):
         while self.running:
             # poll for events
@@ -221,6 +235,11 @@ class Animate():
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
+
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_SPACE:
+                        print('Buffering Raw Data')
+                        self.save_raw_buffer = True
 
             # draw background to wipe away anything from last frame, draw plot grid
             self.draw_background()
@@ -240,6 +259,8 @@ class Animate():
 
                     # data array buffer is processed and stored when full
                     if(len(self.data_arr) == self.data_sample_len):
+                        if (self.save_raw_buffer):
+                            self.save_snapshot()
                         self.process_and_save()
                         
                 except:
