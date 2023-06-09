@@ -226,7 +226,7 @@ class Animate():
             curr_time = datetime.now()
             print("Saving Snapshot At: " + curr_time.strftime("%H-%M-%S"))
             for row in self.data_arr:
-                f_snapshot.write(row[0]+','+row[1]+','+row[2]+','+row[3] +'\n')
+                f_snapshot.write(str(row[0])+','+str(row[1])+','+str(row[2])+','+str(row[3]) +'\n')
         self.save_raw_buffer = False
 
     def run_loop(self):
