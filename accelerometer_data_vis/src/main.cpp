@@ -1,17 +1,17 @@
 #include <Arduino.h>
 
-int baud_rate = 115200;
+int baud_rate = 1000000;
 
 unsigned long timer = 0;
-long loopTime = 2000;   // microseconds
+long loopTime = 1000;   // microseconds
 unsigned long prev_time = 0;
 unsigned long curr_time = 0;
 
-int adc_per_uV = 678;
+int adc_per_uV = 1;
 
-#define pin_x A0
-#define pin_y A1
-#define pin_z A2
+#define pin_x 14
+#define pin_y 15
+#define pin_z 16
 
 
 void timeSync(unsigned long deltaT)

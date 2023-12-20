@@ -12,12 +12,12 @@ class Animate():
     def __init__(self) -> None:
         
         # check serial port of ESP32 device on your computer:
-        self.serial_port = 'COM6'
+        self.serial_port = 'COM7'   ### CHANGE THIS TO MATCH YOUR COMPUTER ###
         # data storage variables:
         self.data_queue = Queue()
         self.data_arr = []
         self.filt_data_arr = []
-        self.data_sample_len = 2500 # 5 seconds of data at 500Hz sample rate
+        self.data_sample_len = 2500 #2500 = 5 seconds of data at 500Hz sample rate
         self.x_avg = 0
         self.y_avg = 0
         self.z_avg = 0
@@ -43,20 +43,20 @@ class Animate():
         self.plot_grid = True
         self.plot_real_time = True
         self.plot_filt_data = True
-        self.plot_trig_points = True
+        self.plot_trig_points = False
 
         # plotting parameters:
-        self.plot_len = 2500
+        self.plot_len = 500
         self.plot_queue = []
         self.plot_y_scale = self.height / 10
 
         # setup data processing low pass filter:
-        sample_rate = 500 # 0.5kHz sample frequency
-        cutoff_freq = 50 # -3db frequency of filter in Hz
+        sample_rate = 1000 # 1kHz sample frequency
+        cutoff_freq = 200 # -3db frequency of filter in Hz
         self.filt_coeff_b, self.filt_coeff_a = signal.butter(3,cutoff_freq,'lowpass',fs=sample_rate)
 
         # setup serial port:     
-        self.port = serial.Serial(self.serial_port, baudrate=115200, timeout=1 )
+        self.port = serial.Serial(self.serial_port, baudrate=1000000, timeout=1 )
         print("port opened at: " + str(self.port.name))
         self.port_thread = threading.Thread(target=self.background_thread, args=(self.port,self.data_queue,))
         self.port_thread.start()
@@ -67,8 +67,8 @@ class Animate():
         self.file.write('timestamp,x_mean,x_std,y_mean,y_std,z_mean,z_std,dT_mean,dT_std\n')
 
         # begin animation loop:
-        self.run_loop()
-
+        #self.run_loop()
+    
     def draw_background(self):
         #fill screen to cover last frame
         self.screen.fill('0x313837')
@@ -203,10 +203,11 @@ class Animate():
             print('error calculating MEAN or STD')
         
         # write data to file
-        curr_time = datetime.now()
-        timestamp = curr_time.strftime("%y-%m-%d_%H-%M-%S")
-        print("save data at: " + curr_time.strftime("%H-%M-%S"))
-        self.file.write(timestamp+','+x_mean+','+x_std+','+y_mean+','+y_std+','+z_mean+','+z_std+','+t_mean+','+t_std+'\n')
+        
+        #curr_time = datetime.now()
+        #timestamp = curr_time.strftime("%y-%m-%d_%H-%M-%S")
+        #print("save data at: " + curr_time.strftime("%H-%M-%S"))
+        #self.file.write(timestamp+','+x_mean+','+x_std+','+y_mean+','+y_std+','+z_mean+','+z_std+','+t_mean+','+t_std+'\n')
         
         self.x_avg = x_mean
         self.y_avg = y_mean
@@ -232,7 +233,7 @@ class Animate():
                     # turn string into array of integers:
                     data = list(map(int, raw_data.strip("\r\n").split(" "))) 
                     # convert data from microvolts to G (accel) based on accelerometer datasheet specs:
-                    g_data = list(map(lambda x: round(((x/1000000) - 1.615)/.3 , 3),data))
+                    g_data = list(map(lambda x: round(((x - 512)/100), 3),data))
                     g_data[3] = round(data[3],3) # reset dT element to microseconds between samples (should not be scaled)
                 
                     self.data_arr.append(g_data)
@@ -272,3 +273,4 @@ class Animate():
 # program entry point:
 if __name__=='__main__':
     my_animation = Animate()
+    my_animation.run_loop()
